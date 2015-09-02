@@ -1,6 +1,6 @@
 tornado-memcache
 ==============
-基于tornado ioloop的异步长连接memcache库
+Async memcached client base on tornado io-loop
 
 Usage
 -----
