@@ -11,7 +11,7 @@ Usage
 -----
 ```python
 import tornado.gen
-from tornmem.client import Client
+from tornmc.client import Client
 
 ...
 

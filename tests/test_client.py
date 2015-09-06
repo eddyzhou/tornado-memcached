@@ -6,7 +6,7 @@ import tornado.ioloop
 from tornado.testing import AsyncTestCase
 from tornado.testing import gen_test
 import sys
-sys.path.append("../tornmem")
+sys.path.append("../tornmc")
 from client import Client
 
 
