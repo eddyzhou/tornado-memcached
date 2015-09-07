@@ -6,17 +6,10 @@ import tornado.ioloop
 from tornado.testing import AsyncTestCase
 from tornado.testing import gen_test
 import sys
-sys.path.append("../tornmc")
-from client import Client
+from tornmc.client import Client
 
 
-class BaseTestCase(AsyncTestCase):
-
-    def get_new_ioloop(self):
-        return tornado.ioloop.IOLoop.instance()
-
-
-class ClientTestCase(BaseTestCase):
+class ClientTestCase(AsyncTestCase):
 
     @gen_test
     def test_set(self):
