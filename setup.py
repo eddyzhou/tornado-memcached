@@ -5,10 +5,10 @@ from setuptools import setup, find_packages
 version = '0.0.1'
 
 setup(
-    name='tornmem',
+    name='tornmc',
     version=version,
     description="Asynchronous Memcached client that works within Tornado IO loop",
-    packages=['tornmem'],
+    packages=['tornmc'],
     author="Eddy Zhou",
     author_email="zhouqian1103@gmail.com",
     license="http://www.apache.org/licenses/LICENSE-2.0",
