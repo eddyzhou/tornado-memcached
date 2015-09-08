@@ -71,7 +71,7 @@ class Client:
     @tornado.gen.coroutine
     def get_multi(self, keys, key_prefix=''):
         response = {}
-        orig_to_noprefix = dict((key_prefix+k, k) for k in keys)
+        orig_to_noprefix = dict((key_prefix+str(k), k) for k in keys)
         key_dict = self._group_keys(keys, key_prefix)
         for host, key_list in key_dict.iteritems():
             connection = yield self.get_connection(host=host)
@@ -90,7 +90,7 @@ class Client:
         raise tornado.gen.Return(response)
 
     def _group_keys(self, keys, key_prefix):
-        key_list = [key_prefix + k for k in keys]
+        key_list = [key_prefix + str(k) for k in keys]
         d = collections.defaultdict(list)
         for key in key_list:
             host = self.get_host(key)
@@ -101,7 +101,7 @@ class Client:
     def set_multi(self, mapping, expire=0, key_prefix=''):
         failed_list = []
         for k, value in mapping.iteritems():
-            key = key_prefix + k
+            key = key_prefix + str(k)
             flags, value = self.get_store_info(value)
             connection = yield self.get_connection(key=key)
             cmd = "%s %s %d %d %d\r\n%s" %('set', key, flags, expire, len(value), value)
