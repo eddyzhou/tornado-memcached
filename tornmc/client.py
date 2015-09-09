@@ -115,9 +115,24 @@ class Client:
 
     @tornado.gen.coroutine
     def set(self, key, value, expire=0):
+        result = yield self._set("set", key, value, expire)
+        raise tornado.gen.Return(result)
+
+    @tornado.gen.coroutine
+    def replace(self, key, value, expire=0):
+        result = yield self._set("replace", key, value, expire)
+        raise tornado.gen.Return(result)
+
+    @tornado.gen.coroutine
+    def add(self, key, value, expire=0):
+        result = yield self._set("add", key, value, expire)
+        raise tornado.gen.Return(result)
+
+    @tornado.gen.coroutine
+    def _set(self, cmd, key, value, expire=0):
         flags, value = self.get_store_info(value)
         connection = yield self.get_connection(key=key)
-        cmd = "%s %s %d %d %d\r\n%s" %('set', key, flags, expire, len(value), value) 
+        cmd = "%s %s %d %d %d\r\n%s" %(cmd, key, flags, expire, len(value), value)
         yield connection.send_cmd(cmd)
         response = yield connection.read_one_line()
         connection.close()
