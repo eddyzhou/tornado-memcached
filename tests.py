@@ -12,6 +12,26 @@ from tornmc.client import Client
 class ClientTestCase(AsyncTestCase):
 
     @gen_test
+    def test_add(self):
+        client = Client(['127.0.0.1:11211'])
+        key = uuid.uuid4().hex
+        res = yield client.add(key, "test", 5)
+        self.assertEqual(res, True)
+        res = yield client.add(key, "test", 5)
+        self.assertEqual(res, False)
+
+    @gen_test
+    def test_replace(self):
+        client = Client(['127.0.0.1:11211'])
+        key = uuid.uuid4().hex
+        res1 = yield client.add(key, "foo", 5)
+        self.assertEqual(res1, True)
+        res2 = yield client.replace(key, "bar", 5)
+        self.assertEqual(res2, True)
+        res3 = yield client.get(key)
+        self.assertEqual(res3, "bar")
+
+    @gen_test
     def test_set(self):
         client = Client(['127.0.0.1:11211'])
         for value in ('abc', u'中国', 5, 5l):
