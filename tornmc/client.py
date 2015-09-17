@@ -6,6 +6,7 @@ import tornado.ioloop
 import cPickle as pickle
 import collections
 import logging
+import zlib
 from binascii import crc32
 from cStringIO import StringIO
 from pool import Pool
@@ -19,6 +20,7 @@ server_hash_function = cmemcache_hash
 _FLAG_PICKLE  = 1<<0
 _FLAG_INTEGER = 1<<1
 _FLAG_LONG    = 1<<2
+_FLAG_COMPRESSED = 1 << 3
 
 class Client:
 
@@ -52,6 +54,10 @@ class Client:
         raise tornado.gen.Return(response)
 
     def _convert(self, flags, value):
+        if flags & _FLAG_COMPRESSED:
+            value = zlib.decompress(value)
+            flags &= ~_FLAG_COMPRESSED
+
         if flags == 0:
             return value
         elif flags & _FLAG_INTEGER:
@@ -98,11 +104,11 @@ class Client:
         return d
 
     @tornado.gen.coroutine
-    def set_multi(self, mapping, expire=0, key_prefix=''):
+    def set_multi(self, mapping, expire=0, key_prefix='', min_compress_len=0):
         failed_list = []
         for k, value in mapping.iteritems():
             key = key_prefix + str(k)
-            flags, value = self.get_store_info(value)
+            flags, value = self.get_store_info(value, min_compress_len)
             connection = yield self.get_connection(key=key)
             cmd = "%s %s %d %d %d\r\n%s" %('set', key, flags, expire, len(value), value)
             yield connection.send_cmd(cmd)
@@ -114,23 +120,23 @@ class Client:
         raise tornado.gen.Return(failed_list)
 
     @tornado.gen.coroutine
-    def set(self, key, value, expire=0):
-        result = yield self._set("set", key, value, expire)
+    def set(self, key, value, expire=0, min_compress_len=0):
+        result = yield self._set("set", key, value, expire, min_compress_len)
         raise tornado.gen.Return(result)
 
     @tornado.gen.coroutine
-    def replace(self, key, value, expire=0):
-        result = yield self._set("replace", key, value, expire)
+    def replace(self, key, value, expire=0, min_compress_len=0):
+        result = yield self._set("replace", key, value, expire, min_compress_len)
         raise tornado.gen.Return(result)
 
     @tornado.gen.coroutine
-    def add(self, key, value, expire=0):
-        result = yield self._set("add", key, value, expire)
+    def add(self, key, value, expire=0, min_compress_len=0):
+        result = yield self._set("add", key, value, expire, min_compress_len)
         raise tornado.gen.Return(result)
 
     @tornado.gen.coroutine
-    def _set(self, cmd, key, value, expire=0):
-        flags, value = self.get_store_info(value)
+    def _set(self, cmd, key, value, expire=0, min_compress_len=0):
+        flags, value = self.get_store_info(value, min_compress_len)
         connection = yield self.get_connection(key=key)
         cmd = "%s %s %d %d %d\r\n%s" %(cmd, key, flags, expire, len(value), value)
         yield connection.send_cmd(cmd)
@@ -138,15 +144,17 @@ class Client:
         connection.close()
         raise tornado.gen.Return(response == 'STORED')
     
-    def get_store_info(self, value):
+    def get_store_info(self, value, min_compress_len):
         flags = 0
         if isinstance(value, unicode):
             value = value.encode('utf-8')
+            min_compress_len = 0
         elif isinstance(value, str):
             pass
         elif isinstance(value, int):
             flags |= _FLAG_INTEGER
-            value = "%d" % value 
+            value = "%d" % value
+            min_compress_len = 0
         elif isinstance(value, long):
             flags |= _FLAG_LONG
             value = "%d" % value
@@ -156,6 +164,14 @@ class Client:
             pickler = pickle.Pickler(file)
             pickler.dump(value)
             value = file.getvalue()
+
+        lv = len(value)
+        if min_compress_len and lv > min_compress_len:
+            comp_val = zlib.compress(value)
+            if len(comp_val) < lv:
+                flags |= _FLAG_COMPRESSED
+                value = comp_val
+
         return (flags, value)
     
     @tornado.gen.coroutine

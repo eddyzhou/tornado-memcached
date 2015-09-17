@@ -12,6 +12,25 @@ from tornmc.client import Client
 class ClientTestCase(AsyncTestCase):
 
     @gen_test
+    def test_compress(self):
+        client = Client(['127.0.0.1:11211'])
+        key = uuid.uuid4().hex
+        yield client.add(key, "111111111111", 5, min_compress_len=1)
+        res = yield client.get(key)
+        self.assertEqual(res, "111111111111")
+        yield client.replace(key, "222222222", 5, min_compress_len=1)
+        res1 = yield client.get(key)
+        self.assertEqual(res1, "222222222")
+        key2 = uuid.uuid4().hex
+        val2 = {"foo":"bar", "test":"test", "ls": [1,2,3], "d": {"foo":1, "bar": "test"}}
+        yield client.set(key2, val2, 5, min_compress_len=1)
+        res2 = yield client.get(key2)
+        self.assertEqual(res2, val2)
+        yield client.set_multi({"foo":"foo", "bar": "bar"}, 5, key_prefix='tc_', min_compress_len=1)
+        res3 = yield client.get_multi(["foo", "bar"], key_prefix='tc_')
+        self.assertEqual(res3, {"foo":"foo", "bar": "bar"})
+
+    @gen_test
     def test_add(self):
         client = Client(['127.0.0.1:11211'])
         key = uuid.uuid4().hex
