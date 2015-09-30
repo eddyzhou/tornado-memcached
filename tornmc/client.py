@@ -55,8 +55,8 @@ class Client:
     @tornado.gen.coroutine
     def _get(self, cmd, key):
         connection = yield self.get_connection(key=key)
-        cmd = '%s %s' % (cmd, key)
-        yield connection.send_cmd(cmd)
+        command = '%s %s' % (cmd, key)
+        yield connection.send_cmd(command)
         head = yield connection.read_one_line()
         if head == 'END':
             connection.close()
@@ -75,7 +75,7 @@ class Client:
         val = val[:-2] # strip \r\n
         result = self._convert(flags, val)
         if cmd == 'gets':
-            response = (result, cas_id)
+            response = (result, int(cas_id))
         else:
             response = result
         raise tornado.gen.Return(response)

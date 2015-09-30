@@ -31,6 +31,22 @@ class ClientTestCase(AsyncTestCase):
         self.assertEqual(res3, {"foo":"foo", "bar": "bar"})
 
     @gen_test
+    def test_cas(self):
+        client = Client(['127.0.0.1:11211'])
+        key = uuid.uuid4().hex
+        yield client.set(key, "foo")
+        value, cas_id = yield client.gets(key)
+        self.assertEqual(value, "foo")
+        res = yield client.cas(key, cas_id, "bar", 5)
+        self.assertEqual(res, True)
+
+        value, cas_id = yield client.gets(key)
+        self.assertEqual(value, "bar")
+        yield client.set(key, "test", 5)
+        res = yield client.cas(key, cas_id, "test2", 5)
+        self.assertEqual(res, False)
+
+    @gen_test
     def test_add(self):
         client = Client(['127.0.0.1:11211'])
         key = uuid.uuid4().hex
@@ -188,7 +204,7 @@ class ClientTestCase(AsyncTestCase):
         yield client.delete("test_foo")
         res2 = yield client.get_multi(["foo", "bar", "0001", "0002"], key_prefix='test_')
         self.assertEqual(res2, {"0001":1, "0002": 2, "bar": "bar"})
-
+    
 
 if __name__ == '__main__':
     import unittest
