@@ -31,17 +31,40 @@ class Client:
         self.pools = {}
         for host in hosts:
             self.pools[host] = Pool(host, io_loop, socket_timeout)
-    
+
     @tornado.gen.coroutine
     def get(self, key):
+        result = yield self._get("get", key)
+        raise tornado.gen.Return(result)
+
+    @tornado.gen.coroutine
+    def gets(self, key):
+        result = yield self._get("gets", key)
+        raise tornado.gen.Return(result)
+
+    @tornado.gen.coroutine
+    def cas(self, key, cas_id, value, expire=0, min_compress_len=0):
+        flags, value = self.get_store_info(value, min_compress_len)
         connection = yield self.get_connection(key=key)
-        cmd = '%s %s' %('get', key)
+        cmd = "%s %s %d %d %d %d\r\n%s" % ("cas", key, flags, expire, len(value), cas_id, value)
+        yield connection.send_cmd(cmd)
+        response = yield connection.read_one_line()
+        connection.close()
+        raise tornado.gen.Return(response == 'STORED')
+
+    @tornado.gen.coroutine
+    def _get(self, cmd, key):
+        connection = yield self.get_connection(key=key)
+        cmd = '%s %s' % (cmd, key)
         yield connection.send_cmd(cmd)
         head = yield connection.read_one_line()
         if head == 'END':
             connection.close()
             raise tornado.gen.Return(None)
-        _, _, flags, length  = head.split(' ')
+        if cmd == 'gets':
+            _, _, flags, length, cas_id  = head.split(' ')
+        else:
+            _, _, flags, length  = head.split(' ')
         length = int(length) + 2 # include \r\n
         flags = int(flags)
         val = yield connection.read_bytes(length)
@@ -50,7 +73,11 @@ class Client:
         connection.close()
 
         val = val[:-2] # strip \r\n
-        response = self._convert(flags, val)
+        result = self._convert(flags, val)
+        if cmd == 'gets':
+            response = (result, cas_id)
+        else:
+            response = result
         raise tornado.gen.Return(response)
 
     def _convert(self, flags, value):
@@ -81,7 +108,7 @@ class Client:
         key_dict = self._group_keys(keys, key_prefix)
         for host, key_list in key_dict.iteritems():
             connection = yield self.get_connection(host=host)
-            cmd = '%s %s' %('get', " ".join(key_list))
+            cmd = '%s %s' % ('get', " ".join(key_list))
             yield connection.send_cmd(cmd)
             line = yield connection.read_one_line()
             while line and line != 'END':
@@ -110,7 +137,7 @@ class Client:
             key = key_prefix + str(k)
             flags, value = self.get_store_info(value, min_compress_len)
             connection = yield self.get_connection(key=key)
-            cmd = "%s %s %d %d %d\r\n%s" %('set', key, flags, expire, len(value), value)
+            cmd = "%s %s %d %d %d\r\n%s" % ('set', key, flags, expire, len(value), value)
             yield connection.send_cmd(cmd)
             # read all responses after write all requests may be faster, simple implement right now.
             response = yield connection.read_one_line()
@@ -138,12 +165,12 @@ class Client:
     def _set(self, cmd, key, value, expire=0, min_compress_len=0):
         flags, value = self.get_store_info(value, min_compress_len)
         connection = yield self.get_connection(key=key)
-        cmd = "%s %s %d %d %d\r\n%s" %(cmd, key, flags, expire, len(value), value)
+        cmd = "%s %s %d %d %d\r\n%s" % (cmd, key, flags, expire, len(value), value)
         yield connection.send_cmd(cmd)
         response = yield connection.read_one_line()
         connection.close()
         raise tornado.gen.Return(response == 'STORED')
-    
+
     def get_store_info(self, value, min_compress_len):
         flags = 0
         if isinstance(value, unicode):
@@ -173,7 +200,7 @@ class Client:
                 value = comp_val
 
         return (flags, value)
-    
+
     @tornado.gen.coroutine
     def incr(self, key, delta=1):
         result = yield self._incr_or_decr('incr', key, delta)
@@ -183,11 +210,11 @@ class Client:
     def decr(self, key, delta=1):
         result = yield self._incr_or_decr('decr', key, delta)
         raise tornado.gen.Return(result)
-    
+
     @tornado.gen.coroutine
     def delete(self, key):
         connection = yield self.get_connection(key=key)
-        cmd = 'delete %s' %(key) 
+        cmd = 'delete %s' % (key)
         yield connection.send_cmd(cmd)
         response = yield connection.read_one_line()
         connection.close()
@@ -196,7 +223,7 @@ class Client:
     @tornado.gen.coroutine
     def _incr_or_decr(self, cmd, key, delta):
         connection = yield self.get_connection(key=key)
-        cmd = '%s %s %d' %(cmd, key, delta) 
+        cmd = '%s %s %d' % (cmd, key, delta)
         yield connection.send_cmd(cmd)
         response = yield connection.read_one_line()
         if not response.isdigit():
@@ -204,7 +231,7 @@ class Client:
             raise tornado.gen.Return(None)
         connection.close()
         raise tornado.gen.Return(int(response))
-    
+
     def get_host(self, key):
         key_hash = server_hash_function(key)
         return self.hosts[key_hash % len(self.hosts)]
@@ -217,6 +244,6 @@ class Client:
         c = yield pool.get_connection()
         raise tornado.gen.Return(c)
 
-    def close(self):
+    def disconnect_all(self):
         for _, pool in self.pools.iteritems():
             pool.close()
