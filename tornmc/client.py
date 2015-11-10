@@ -26,7 +26,6 @@ class Client:
 
     def __init__(self, hosts, io_loop=None, socket_timeout=5):
         self.hosts = hosts
-        self.dead_hosts = hosts
         io_loop = io_loop or tornado.ioloop.IOLoop.instance()
         self.pools = {}
         for host in hosts:
