@@ -6,7 +6,7 @@ import uuid
 from tornado.testing import AsyncTestCase
 from tornado.testing import gen_test
 
-from tornmc.client import Client
+from tornmc.client import Client, MemcachedError
 
 
 class ClientTestCase(AsyncTestCase):
@@ -220,12 +220,16 @@ class ClientTestCase(AsyncTestCase):
         client = Client(['127.0.0.1:11211'])
         key = '😄 😊 😃 😉 😍 😘 😚 😳 😁 '
         val = '😄 😊 😃 😉 😍 😘 😚 😳 😁 '
-        res = yield client.add(key, val, 5)
-        self.assertEquals(res, False)
-        try:
-            res = yield client.get(key)
-        except:
-            pass
+        res = yield client.get(key)
+        self.assertEquals(res, None)
+        with self.assertRaises(MemcachedError):
+            yield client.set(key, val)
+        res = yield client.get(key)
+        self.assertEquals(res, None)
+        with self.assertRaises(MemcachedError):
+            res = yield client.add(key, val, 5)
+        yield client.get(key)
+        self.assertEquals(res, None)
         for p in client.pools.values():
             self.assertEquals(p.active, 0)
 

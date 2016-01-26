@@ -25,6 +25,22 @@ _FLAG_LONG = 1 << 2
 _FLAG_COMPRESSED = 1 << 3
 
 
+class MemcachedError(Exception):
+    pass
+
+
+class MemcachedUnknownCommandError(MemcachedError):
+    pass
+
+
+class MemcachedClientError(MemcachedError):
+    pass
+
+
+class MemcachedServerError(MemcachedError):
+    pass
+
+
 class Client:
 
     def __init__(self, hosts, io_loop=None, socket_timeout=5,
@@ -57,8 +73,9 @@ class Client:
                   ('cas', key, flags, expire, len(value), cas_id, value)
             yield connection.send_cmd(cmd)
             response = yield connection.read_one_line()
+            self._raise_errors(response, 'cas')
             connection.close()
-        except:
+        except (StandardError, MemcachedError):
             connection.disconnect()
             raise
         raise tornado.gen.Return(response == 'STORED')
@@ -70,6 +87,7 @@ class Client:
             command = '%s %s' % (cmd, key)
             yield connection.send_cmd(command)
             head = yield connection.read_one_line()
+            self._raise_errors(head, cmd)
             if head == 'END':
                 connection.close()
                 raise tornado.gen.Return(None)
@@ -83,7 +101,7 @@ class Client:
             end = yield connection.read_one_line()
             assert end == 'END'
             connection.close()
-        except:
+        except (StandardError, MemcachedError):
             connection.disconnect()
             raise
         val = val[:-2]  # strip \r\n
@@ -93,6 +111,18 @@ class Client:
         else:
             response = result
         raise tornado.gen.Return(response)
+
+    def _raise_errors(self, line, cmd):
+        if line.startswith(b'ERROR'):
+            raise MemcachedUnknownCommandError(cmd)
+
+        if line.startswith(b'CLIENT_ERROR'):
+            error = line[line.find(b' ') + 1:]
+            raise MemcachedClientError(error)
+
+        if line.startswith(b'SERVER_ERROR'):
+            error = line[line.find(b' ') + 1:]
+            raise MemcachedServerError(error)
 
     def _convert(self, flags, value):
         if flags & _FLAG_COMPRESSED:
@@ -126,6 +156,7 @@ class Client:
                 cmd = '%s %s' % ('get', ' '.join(key_list))
                 yield connection.send_cmd(cmd)
                 line = yield connection.read_one_line()
+                self._raise_errors(line, 'get')
                 while line and line != 'END':
                     _, key, flags, length = line.split(' ')
                     length = int(length) + 2  # include \r\n
@@ -135,7 +166,7 @@ class Client:
                     response[orig_to_noprefix[key]] = self._convert(flags, val)
                     line = yield connection.read_one_line()
                 connection.close()
-            except:
+            except (StandardError, MemcachedError):
                 connection.disconnect()
                 raise
         raise tornado.gen.Return(response)
@@ -162,8 +193,9 @@ class Client:
                 # read all responses after write all requests may be faster,
                 # simple implement right now.
                 response = yield connection.read_one_line()
+                self._raise_errors(response, 'set')
                 connection.close()
-            except:
+            except (StandardError, MemcachedError):
                 connection.disconnect()
                 raise
             if response != 'STORED':
@@ -195,8 +227,9 @@ class Client:
                   (cmd, key, flags, expire, len(value), value)
             yield connection.send_cmd(cmd)
             response = yield connection.read_one_line()
+            self._raise_errors(response, cmd)
             connection.close()
-        except:
+        except (StandardError, MemcachedError):
             connection.disconnect()
             raise
         raise tornado.gen.Return(response == 'STORED')
@@ -248,8 +281,9 @@ class Client:
             cmd = 'delete %s' % (key)
             yield connection.send_cmd(cmd)
             response = yield connection.read_one_line()
+            self._raise_errors(response, 'delete')
             connection.close()
-        except:
+        except (StandardError, MemcachedError):
             connection.disconnect()
             raise
         raise tornado.gen.Return(response in ('DELETED', 'NOT_FOUND'))
@@ -261,11 +295,12 @@ class Client:
             cmd = '%s %s %d' % (cmd, key, delta)
             yield connection.send_cmd(cmd)
             response = yield connection.read_one_line()
+            self._raise_errors(response, cmd)
             if not response.isdigit():
                 connection.close()
                 raise tornado.gen.Return(None)
             connection.close()
-        except:
+        except (StandardError, MemcachedError):
             connection.disconnect()
             raise
         raise tornado.gen.Return(int(response))
