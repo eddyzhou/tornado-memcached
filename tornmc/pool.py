@@ -100,8 +100,8 @@ class Pool(object):
                                self.socket_timeout,
                                self.socket_timeout,
                                self.socket_timeout)
-            c.ensure_tcp_timeout()
             self.active += 1
+            c.ensure_tcp_timeout()
             yield c.connect()
             raise tornado.gen.Return(c)
         else:
