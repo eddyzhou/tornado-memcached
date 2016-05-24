@@ -172,8 +172,9 @@ class PoolConnection:
         raise tornado.gen.Return(response)
 
     def _on_timeout(self, error=TimeoutError):
-        self.stream.close()
-        self.pool.active -= 1
+        if not self.stream.closed():
+            self.stream.close()
+            self.pool.active -= 1
         if error is not None:
             raise error()
 
