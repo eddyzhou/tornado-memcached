@@ -57,7 +57,7 @@ class Pool(object):
         return self.active
 
     def put(self, connection):
-        if not self.closed:
+        if not self.closed and not connection.stream.closed():
             connection.idle_at = time.time()
             self.idle_queue.append(connection)
             self.active -= 1
@@ -172,9 +172,7 @@ class PoolConnection:
         raise tornado.gen.Return(response)
 
     def _on_timeout(self, error=TimeoutError):
-        if not self.stream.closed():
-            self.stream.close()
-            self.pool.active -= 1
+        self.disconnect()
         if error is not None:
             raise error()
 
@@ -197,5 +195,6 @@ class PoolConnection:
         if self.tcp_timeout:
             self.remove_timeout(self.tcp_timeout)
             self.tcp_timeout = None
-        self.stream.close()
-        self.pool.active -= 1
+        if not self.stream.closed():
+            self.stream.close()
+            self.pool.active -= 1
