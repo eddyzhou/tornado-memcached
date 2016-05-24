@@ -141,8 +141,7 @@ class PoolConnection:
 
     def ensure_tcp_timeout(self, timeout=60):
         # prevent unclosed tcp connection
-        self.tcp_timeout = self.add_timeout(self.io_loop.time()+timeout,
-                                            error=None)
+        self.tcp_timeout = self.add_timeout(timeout, error=None)
 
     @tornado.gen.coroutine
     def send_cmd(self, cmd):
